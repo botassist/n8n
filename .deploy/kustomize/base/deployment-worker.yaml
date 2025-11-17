@@ -28,7 +28,7 @@ spec:
         - name: botassist-n8n-worker
           image: ghcr.io/botassist/n8n:latest
           imagePullPolicy: Always
-          command: ["worker"]
+          args: ["worker"]
           startupProbe:
             initialDelaySeconds: 10
             periodSeconds: 5
