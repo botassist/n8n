@@ -97,6 +97,7 @@ jobs:
                   - --dockerfile=docker/images/n8n/Dockerfile
                   - --context=dir:///workspace/${{ github.event.repository.name }}
                   - --destination=$IMAGE_URL
+                  - --build-arg=TARGETPLATFORM=linux/amd64
                   - --verbosity=debug
                 volumeMounts:
                   - name: just-a-code
