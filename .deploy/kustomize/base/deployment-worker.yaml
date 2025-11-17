@@ -29,29 +29,6 @@ spec:
           image: ghcr.io/botassist/n8n:latest
           imagePullPolicy: Always
           args: ["worker"]
-          startupProbe:
-            initialDelaySeconds: 10
-            periodSeconds: 5
-            timeoutSeconds: 5
-            failureThreshold: 180
-            httpGet:
-              path: /healthz
-              port: http
-          livenessProbe:
-            periodSeconds: 60
-            timeoutSeconds: 10
-            failureThreshold: 5
-            httpGet:
-              path: /healthz
-              port: http
-          readinessProbe:
-            periodSeconds: 10
-            timeoutSeconds: 5
-            successThreshold: 1
-            failureThreshold: 3
-            httpGet:
-              path: /healthz
-              port: http
           ports:
             - containerPort: 5678
               protocol: TCP
