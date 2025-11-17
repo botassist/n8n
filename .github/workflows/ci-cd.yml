@@ -1,0 +1,206 @@
+---
+name: Build and Deploy Docker Image
+on:
+  push:
+    branches: [ 'master' ]
+  workflow_dispatch: null
+jobs:
+  build:
+    runs-on: arc-runner-set
+    permissions:
+      contents: read
+      packages: write
+    steps:
+
+      - name: Create a K8s-DOCKER_CONFIG secret with GH_CI_TOKEN
+        run: |
+          kubectl create secret docker-registry github-dockerconfig-secret \
+            --docker-server='ghcr.io' \
+            --docker-username=${{ github.repository_owner }} \
+            --docker-password=${{ secrets.GH_CI_TOKEN }} \
+            --docker-email="${{ github.repository_owner }}@ailab.im" \
+            -n arc-runners \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+
+      - name: Preset Image Name
+        run: |
+          echo "IMAGE_URL=$(echo "ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.ref_name }}-$(echo "${{ github.sha }}" | cut -c1-7)" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - name: Cleanup old build pod
+        run: |
+          kubectl delete pod kaniko-${{ github.event.repository.name }}-${{ github.job }} --ignore-not-found=true
+          kubectl wait --for=delete pod/kaniko-${{ github.event.repository.name }}-${{ github.job }} --timeout=60s 2>/dev/null || true
+
+      - name: Building Image
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: kaniko-${{ github.event.repository.name }}-${{ github.job }}
+          spec:
+            volumes:
+              - name: just-a-code
+                emptyDir: {}
+              - name: docker-config
+                secret:
+                  secretName: github-dockerconfig-secret
+                  items:
+                    - key: .dockerconfigjson
+                      path: config.json
+            initContainers:
+              - name: init-code
+                image: alpine/git
+                command:
+                  - /bin/sh
+                  - -c
+                  - git clone https://${{ secrets.GH_CI_TOKEN }}@github.com/${{ github.repository_owner }}/${{ github.event.repository.name }}.git -b ${{ github.ref_name }} /workspace/${{ github.event.repository.name }}
+                volumeMounts:
+                  - name: just-a-code
+                    mountPath: /workspace
+                resources:
+                  requests:
+                    cpu: 100m
+                    memory: 128Mi
+                  limits:
+                    cpu: 500m
+                    memory: 512Mi
+              - name: build-n8n
+                image: node:22-alpine
+                workingDir: /workspace/${{ github.event.repository.name }}
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    apk add --no-cache python3 make g++ git
+                    npm install -g pnpm@10.18.3
+                    pnpm install --frozen-lockfile
+                    pnpm run build:n8n
+                volumeMounts:
+                  - name: just-a-code
+                    mountPath: /workspace
+                resources:
+                  requests:
+                    cpu: 1000m
+                    memory: 4Gi
+                  limits:
+                    cpu: 4
+                    memory: 8Gi
+            containers:
+              - name: kaniko
+                image: gcr.io/kaniko-project/executor:latest
+                args:
+                  - --dockerfile=docker/images/n8n/Dockerfile
+                  - --context=dir:///workspace/${{ github.event.repository.name }}
+                  - --destination=$IMAGE_URL
+                  - --verbosity=debug
+                volumeMounts:
+                  - name: just-a-code
+                    readOnly: true
+                    mountPath: /workspace
+                  - name: docker-config
+                    mountPath: /kaniko/.docker/
+                resources:
+                  requests:
+                    cpu: 500m
+                    memory: 2Gi
+                  limits:
+                    cpu: 2
+                    memory: 7Gi
+            restartPolicy: Never
+          EOF
+
+      - name: Logs and Wait for build
+        timeout-minutes: 15
+        run: |
+          sleep 10
+          exec > >(ts "[%Y-%m-%d %H:%M:%S]") 2>&1
+          kubectl logs -f "kaniko-${{ github.event.repository.name }}-${{ github.job }}" -c "kaniko" 2>/dev/null & log_pid=$!
+          kubectl wait --for=condition=ready=false pod/"kaniko-${{ github.event.repository.name }}-${{ github.job }}" --timeout=900s
+          kill $log_pid 2>/dev/null || true
+
+      - name: Verify build success
+        run: |
+          # Wait a bit for the pod to finish
+          sleep 10
+          
+          # Wait for pod to be in Succeeded or Failed state
+          kubectl wait --for=jsonpath='{.status.phase}'=Succeeded \
+            pod/kaniko-${{ github.event.repository.name }}-${{ github.job }} \
+            --timeout=60s || true
+          
+          POD_STATUS=$(kubectl get pod kaniko-${{ github.event.repository.name }}-${{ github.job }} -o jsonpath='{.status.phase}')
+          
+          # Check if image was pushed successfully by looking at logs
+          if kubectl logs kaniko-${{ github.event.repository.name }}-${{ github.job }} -c kaniko 2>/dev/null | grep -q "Pushed.*ghcr.io"; then
+            echo "✅ Build successful! Image pushed to registry."
+            echo "Pod final status: $POD_STATUS"
+            exit 0
+          else
+            echo "❌ Build failed! Pod status: $POD_STATUS"
+            echo "Last 100 lines of logs:"
+            kubectl logs kaniko-${{ github.event.repository.name }}-${{ github.job }} -c kaniko --tail=100 2>&1 || true
+            exit 1
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ "${{ vars.pipeline_debug }}" = "0" ]; then
+            kubectl delete pod "kaniko-${{ github.event.repository.name }}-${{ github.job }}" || true
+          else
+            kubectl describe pod "kaniko-${{ github.event.repository.name }}-${{ github.job }}"
+          fi
+
+  deploy_prod:
+    needs: [build]
+    runs-on: arc-runner-set
+    permissions:
+      contents: read
+    environment: prod
+    steps:
+      - name: Preset Image tag
+        run: |
+          echo "IMAGE_TAG=$(echo "${{ github.ref_name }}-$(echo "${{ github.sha }}" | cut -c1-7)" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - name: Checkout k8s-infra repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/k8s-infra
+          path: k8s-infra
+          token: ${{ secrets.GH_CI_TOKEN }}
+
+      - name: Deploy production
+        run: |
+          mkdir -p ~/.kube
+          echo "${{secrets.K8S_ADMIN_CONFIG}}" > ~/.kube/config
+          echo "${{vars.ENVS}}" > k8s-infra/ailab-deploy/n8n/prod/.env.vars
+          export IMAGE_TAG=$IMAGE_TAG
+          kubectl create secret docker-registry ghcr-login-secret \
+            --docker-server='ghcr.io' \
+            --docker-username=${{ github.repository_owner }} \
+            --docker-password=${{ secrets.GH_CI_TOKEN }} \
+            --docker-email="${{ github.repository_owner }}@ailab.im" \
+            -n ailab \
+            --dry-run=client -o yaml | kubectl apply -f -
+          cd k8s-infra/ailab-deploy/n8n/prod
+          envsubst < kustomization.yaml > prod-kustomization.yaml && mv -f prod-kustomization.yaml kustomization.yaml
+          kubectl apply -k .
+          rm -f ~/.kube/config
+
+      - name: Wait for rollout
+        run: |
+          mkdir -p ~/.kube
+          echo "${{secrets.K8S_ADMIN_CONFIG}}" > ~/.kube/config
+          kubectl rollout status deployment/botassist-n8n-main -n ailab --timeout=600s
+          kubectl rollout status deployment/botassist-n8n-worker -n ailab --timeout=600s
+          rm -f ~/.kube/config
+
+      - name: Deployment status
+        if: always()
+        run: |
+          mkdir -p ~/.kube
+          echo "${{secrets.K8S_ADMIN_CONFIG}}" > ~/.kube/config
+          kubectl get pods -n ailab | grep botassist-n8n
+          rm -f ~/.kube/config
