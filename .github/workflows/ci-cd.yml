@@ -201,18 +201,14 @@ jobs:
         run: |
           echo "IMAGE_TAG=$(echo "${{ github.ref_name }}-$(echo "${{ github.sha }}" | cut -c1-7)" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
 
-      - name: Checkout k8s-infra repository
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/k8s-infra
-          path: k8s-infra
-          token: ${{ secrets.GH_CI_TOKEN }}
 
       - name: Deploy production
         run: |
           mkdir -p ~/.kube
           echo "${{secrets.K8S_ADMIN_CONFIG}}" > ~/.kube/config
-          echo "${{vars.ENVS}}" > k8s-infra/ailab-deploy/n8n/prod/.env.vars
+          echo "${{vars.ENVS}}" > .deploy/kustomize/prod/.env.vars
           export IMAGE_TAG=$IMAGE_TAG
           kubectl create secret docker-registry ghcr-login-secret \
             --docker-server='ghcr.io' \
@@ -221,9 +217,8 @@ jobs:
             --docker-email="${{ github.repository_owner }}@ailab.im" \
             -n ailab \
             --dry-run=client -o yaml | kubectl apply -f -
-          cd k8s-infra/ailab-deploy/n8n/prod
-          envsubst < kustomization.yaml > prod-kustomization.yaml && mv -f prod-kustomization.yaml kustomization.yaml
-          kubectl apply -k .
+          envsubst < .deploy/kustomize/prod/kustomization.yaml > prod-kustomization.yaml && mv -f prod-kustomization.yaml .deploy/kustomize/prod/kustomization.yaml
+          kubectl apply -k .deploy/kustomize/prod
           rm -f ~/.kube/config
 
       - name: Wait for rollout

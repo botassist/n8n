@@ -1,0 +1,26 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: botassist-n8n
+  namespace: ailab
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: n8n.bot-assist.online
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: botassist-n8n
+            port:
+              number: 5678
+  tls:
+  - hosts:
+    - n8n.bot-assist.online
+    secretName: wildcard-botassist-online
+
