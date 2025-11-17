@@ -73,10 +73,11 @@ jobs:
                   - /bin/sh
                   - -c
                   - |
+                    set -e
                     apk add --no-cache python3 make g++ git
                     npm install -g pnpm@10.18.3
                     pnpm install --frozen-lockfile
-                    pnpm run build:n8n
+                    pnpm build
                 volumeMounts:
                   - name: just-a-code
                     mountPath: /workspace
