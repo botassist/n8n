@@ -113,12 +113,12 @@ jobs:
           EOF
 
       - name: Logs and Wait for build
-        timeout-minutes: 15
+        timeout-minutes: 25
         run: |
           sleep 10
           exec > >(ts "[%Y-%m-%d %H:%M:%S]") 2>&1
           kubectl logs -f "kaniko-${{ github.event.repository.name }}-${{ github.job }}" -c "kaniko" 2>/dev/null & log_pid=$!
-          kubectl wait --for=condition=ready=false pod/"kaniko-${{ github.event.repository.name }}-${{ github.job }}" --timeout=900s
+          kubectl wait --for=condition=ready=false pod/"kaniko-${{ github.event.repository.name }}-${{ github.job }}" --timeout=1500s
           kill $log_pid 2>/dev/null || true
 
       - name: Verify build success
@@ -126,10 +126,10 @@ jobs:
           # Wait a bit for the pod to finish
           sleep 10
           
-          # Wait for pod to be in Succeeded or Failed state
+          # Wait for pod to be in Succeeded or Failed state (n8n build takes 10-15 minutes)
           kubectl wait --for=jsonpath='{.status.phase}'=Succeeded \
             pod/kaniko-${{ github.event.repository.name }}-${{ github.job }} \
-            --timeout=60s || true
+            --timeout=1200s || true
           
           POD_STATUS=$(kubectl get pod kaniko-${{ github.event.repository.name }}-${{ github.job }} -o jsonpath='{.status.phase}')
           
