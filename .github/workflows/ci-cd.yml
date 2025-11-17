@@ -114,13 +114,46 @@ jobs:
             restartPolicy: Never
           EOF
 
-      - name: Logs and Wait for build
-        timeout-minutes: 25
+      - name: Wait for build initContainers
+        timeout-minutes: 20
         run: |
-          sleep 10
+          echo "Waiting for initContainers to complete..."
+          sleep 5
+          
+          # Follow logs from build-n8n initContainer
+          while true; do
+            POD_STATUS=$(kubectl get pod "kaniko-${{ github.event.repository.name }}-${{ github.job }}" -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
+            
+            if [ "$POD_STATUS" = "NotFound" ]; then
+              echo "Waiting for pod to be created..."
+              sleep 5
+              continue
+            fi
+            
+            # Check if build-n8n container is running
+            BUILD_STATE=$(kubectl get pod "kaniko-${{ github.event.repository.name }}-${{ github.job }}" -o jsonpath='{.status.initContainerStatuses[?(@.name=="build-n8n")].state}' 2>/dev/null)
+            
+            if echo "$BUILD_STATE" | grep -q "running"; then
+              echo "=== Following build-n8n logs ==="
+              kubectl logs -f "kaniko-${{ github.event.repository.name }}-${{ github.job }}" -c build-n8n 2>/dev/null || true
+              break
+            elif echo "$BUILD_STATE" | grep -q "terminated"; then
+              echo "=== build-n8n completed, showing logs ==="
+              kubectl logs "kaniko-${{ github.event.repository.name }}-${{ github.job }}" -c build-n8n 2>/dev/null || true
+              break
+            else
+              sleep 3
+            fi
+          done
+
+      - name: Logs and Wait for kaniko build
+        timeout-minutes: 10
+        run: |
+          echo "=== Waiting for Kaniko Docker build ==="
+          sleep 5
           exec > >(ts "[%Y-%m-%d %H:%M:%S]") 2>&1
           kubectl logs -f "kaniko-${{ github.event.repository.name }}-${{ github.job }}" -c "kaniko" 2>/dev/null & log_pid=$!
-          kubectl wait --for=condition=ready=false pod/"kaniko-${{ github.event.repository.name }}-${{ github.job }}" --timeout=1500s
+          kubectl wait --for=condition=ready=false pod/"kaniko-${{ github.event.repository.name }}-${{ github.job }}" --timeout=600s
           kill $log_pid 2>/dev/null || true
 
       - name: Verify build success
