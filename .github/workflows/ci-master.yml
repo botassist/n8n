@@ -1,11 +1,13 @@
 name: Test Master
 
+# Disabled - using ci-cd.yml for deployment instead
 on:
-  push:
-    branches:
-      - master
-    paths-ignore:
-      - packages/@n8n/task-runner-python/**
+  workflow_dispatch: null
+  # push:
+  #   branches:
+  #     - master
+  #   paths-ignore:
+  #     - packages/@n8n/task-runner-python/**
 
 jobs:
   build-github:
