@@ -1,8 +1,8 @@
 name: Playwright Tests - Nightly
 
 on:
-  schedule:
-    - cron: '0 4 * * *'
+  # schedule:
+  #   - cron: '0 4 * * *'
   workflow_dispatch:
     inputs:
       image:
@@ -10,9 +10,9 @@ on:
         required: false
         default: 'n8nio/n8n:nightly'
         type: string
-  push:
-    branches:
-      - ci-containers-nightly
+  # push:
+  #   branches:
+  #     - ci-containers-nightly
 
 jobs:
   test-configurations:

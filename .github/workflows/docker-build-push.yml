@@ -12,8 +12,8 @@ env:
   NODE_VERSION: '22.21.0'
 
 on:
-  schedule:
-    - cron: '0 0 * * *'
+  # schedule:
+  #   - cron: '0 0 * * *'
 
   workflow_call:
     inputs:
