@@ -3,14 +3,14 @@
 Кастомные ноды для Kafka-транспорта между core и n8n.
 
 ## Ноды
-- **Botassist Kafka Trigger** — слушает входной Kafka-топик (`botassist.n8n.input`) и запускает workflow. Фильтр по `workflowId` опционален.
-- **Botassist Kafka Output** — публикует результат workflow в выходной Kafka-топик (`botassist.n8n.output`). Отправляет либо `item.json`, либо кастомный JSON.
+- **Botamin Kafka Trigger** — слушает входной Kafka-топик (`botamin.n8n.input`) и запускает workflow. Фильтр по `workflowId` и `event` опционален.
+- **Botamin Kafka Output** — публикует результат workflow в выходной Kafka-топик (`botamin.n8n.output`). Отправляет либо `item.json`, либо кастомный JSON.
 
 ## Настройка
 - Брокеры из параметра или `KAFKA_BROKERS` (пример: `localhost:29092`).
 - Топики по умолчанию:
-  - Input: `botassist.n8n.input`
-  - Output: `botassist.n8n.output`
+  - Input: `botamin.n8n.input`
+  - Output: `botamin.n8n.output`
 - Group ID триггера: `n8n-botassist-trigger` (можно переопределить).
 
 ## Сборка и установка в n8n

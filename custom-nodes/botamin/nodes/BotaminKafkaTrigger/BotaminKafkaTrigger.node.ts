@@ -6,17 +6,17 @@ import {
 } from 'n8n-workflow';
 import { Consumer, Kafka, logLevel } from 'kafkajs';
 
-export class BotassistKafkaTrigger implements INodeType {
+export class BotaminKafkaTrigger implements INodeType {
   description: INodeTypeDescription = {
-    displayName: 'Botassist Kafka Trigger',
-    name: 'botassistKafkaTrigger',
+    displayName: 'Botamin Kafka Trigger',
+    name: 'botaminKafkaTrigger',
     icon: 'file:kafka.svg',
     group: ['trigger'],
     version: 1,
     description:
-      'Начинает выполнение workflow при получении сообщения из Kafka от Botassist',
+      'Начинает выполнение workflow при получении сообщения из Kafka от Botamin',
     defaults: {
-      name: 'Botassist Kafka Trigger',
+      name: 'Botamin Kafka Trigger',
     },
     inputs: [],
     outputs: ['main'],
@@ -35,7 +35,7 @@ export class BotassistKafkaTrigger implements INodeType {
         displayName: 'Topic',
         name: 'topic',
         type: 'string',
-        default: 'botassist.n8n.input',
+        default: 'botamin.n8n.input',
         description: 'Топик, куда core публикует события для n8n',
         required: true,
       },
@@ -43,7 +43,7 @@ export class BotassistKafkaTrigger implements INodeType {
         displayName: 'Group ID',
         name: 'groupId',
         type: 'string',
-        default: 'n8n-botassist-trigger',
+        default: 'n8n-botamin-trigger',
         description: 'Идентификатор consumer group для этого workflow',
         required: true,
       },
@@ -53,6 +53,21 @@ export class BotassistKafkaTrigger implements INodeType {
         type: 'boolean',
         default: false,
         description: 'Подписаться с начала топика (по умолчанию только новые сообщения)',
+      },
+      {
+        displayName: 'Event Filter',
+        name: 'eventFilter',
+        type: 'options',
+        default: 'ChatMessageInput',
+        description: 'Фильтр по типу события. Workflow запустится только для указанного события.',
+        required: true,
+        options: [
+          {
+            name: 'Chat Message Input',
+            value: 'ChatMessageInput',
+            description: 'Входящее сообщение в чат',
+          },
+        ],
       },
       {
         displayName: 'Workflow Filter',
@@ -77,6 +92,7 @@ export class BotassistKafkaTrigger implements INodeType {
     const topic = this.getNodeParameter('topic', 0) as string;
     const groupId = this.getNodeParameter('groupId', 0) as string;
     const fromBeginning = this.getNodeParameter('fromBeginning', 0) as boolean;
+    const eventFilter = (this.getNodeParameter('eventFilter', 0) as string) || '';
     const workflowFilter = (this.getNodeParameter('workflowFilter', 0) as string) || '';
     const parseJson = this.getNodeParameter('parseJson', 0) as boolean;
 
@@ -91,16 +107,27 @@ export class BotassistKafkaTrigger implements INodeType {
     }
 
     const kafka = new Kafka({
-      clientId: 'n8n-botassist-trigger',
+      clientId: 'n8n-botamin-trigger',
       brokers,
       logLevel: logLevel.NOTHING,
     });
 
     const consumer: Consumer = kafka.consumer({
-      groupId: groupId || 'n8n-botassist-trigger',
+      groupId: groupId || 'n8n-botamin-trigger',
     });
 
     const emitItem = async (rawPayload: any) => {
+      // Фильтрация по event (если указан фильтр)
+      if (eventFilter) {
+        const eventFromPayload =
+          typeof rawPayload === 'object' && rawPayload
+            ? rawPayload.event
+            : undefined;
+        if (eventFromPayload !== eventFilter) {
+          return;
+        }
+      }
+
       // Фильтрация по workflowId (если нужно)
       if (workflowFilter) {
         const workflowIdFromPayload =
@@ -177,3 +204,4 @@ export class BotassistKafkaTrigger implements INodeType {
     };
   }
 }
+

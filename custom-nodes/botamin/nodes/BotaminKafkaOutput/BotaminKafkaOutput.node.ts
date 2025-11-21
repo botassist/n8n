@@ -6,16 +6,16 @@ import {
 } from 'n8n-workflow';
 import { Kafka, logLevel } from 'kafkajs';
 
-export class BotassistKafkaOutput implements INodeType {
+export class BotaminKafkaOutput implements INodeType {
   description: INodeTypeDescription = {
-    displayName: 'Botassist Kafka Output',
-    name: 'botassistKafkaOutput',
+    displayName: 'Botamin Kafka Output',
+    name: 'botaminKafkaOutput',
     icon: 'file:kafka.svg',
     group: ['output'],
     version: 1,
     description: 'Отправляет результат workflow в Kafka для core. Только входящая нода — данные не передаются дальше.',
     defaults: {
-      name: 'Botassist Kafka Output',
+      name: 'Botamin Kafka Output',
     },
     inputs: ['main'],
     outputs: [],
@@ -33,7 +33,7 @@ export class BotassistKafkaOutput implements INodeType {
         displayName: 'Topic',
         name: 'topic',
         type: 'string',
-        default: 'botassist.n8n.output',
+        default: 'botamin.n8n.output',
         description: 'Топик, куда публикуется результат для core',
         required: true,
       },
@@ -185,7 +185,7 @@ export class BotassistKafkaOutput implements INodeType {
     }
 
     const kafka = new Kafka({
-      clientId: 'n8n-botassist-output',
+      clientId: 'n8n-botamin-output',
       brokers,
       logLevel: logLevel.NOTHING,
     });
@@ -292,3 +292,4 @@ export class BotassistKafkaOutput implements INodeType {
     return [[]];
   }
 }
+
