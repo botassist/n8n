@@ -38,12 +38,19 @@ export class BotaminKafkaOutput implements INodeType {
         required: true,
       },
       {
+        displayName: 'Correlation ID',
+        name: 'correlationId',
+        type: 'string',
+        default: '',
+        description: 'Correlation ID из входящего сообщения. Если не указан, будет автоматически извлечен из данных trigger. Используется для связи с execution в core.',
+        required: false,
+      },
+      {
         displayName: 'Execution ID',
         name: 'executionId',
-        type: 'string',
-        default: '={{$execution.id}}',
-        description: 'ID выполнения workflow в n8n. По умолчанию используется {{$execution.id}}',
-        required: true,
+        type: 'hidden',
+        default: '={{ $execution.id }}',
+        description: 'ID выполнения workflow в n8n (берется автоматически)',
       },
       {
         displayName: 'Response Text',
@@ -195,7 +202,8 @@ export class BotaminKafkaOutput implements INodeType {
 
     const messages = items.map((item, index) => {
       // Вычисляем значения выражений для каждого item
-      const executionId = this.getNodeParameter('executionId', index) as string;
+      const correlationIdParam = this.getNodeParameter('correlationId', index) as string;
+      const executionIdParam = this.getNodeParameter('executionId', index) as string;
       const responseText = this.getNodeParameter('responseText', index) as string;
       const event = (this.getNodeParameter('event', index) as string) || 'ChatMessageResponse';
       const error = status === 'error' 
@@ -217,8 +225,32 @@ export class BotaminKafkaOutput implements INodeType {
         }
       }
 
-      // Берем данные из триггера (из item.json)
-      const triggerData = item.json || {};
+      // Берем данные из триггера - пытаемся найти BotaminKafkaTrigger в workflow
+      let triggerData: Record<string, any> = item.json || {};
+      let correlationIdFromTrigger: string | undefined;
+
+      // Пытаемся найти correlationId в текущих данных
+      if (triggerData.correlationId) {
+        correlationIdFromTrigger = triggerData.correlationId;
+      }
+
+      // Если не нашли, пытаемся получить из trigger ноды напрямую
+      if (!correlationIdFromTrigger) {
+        try {
+          const workflowData = this.getWorkflowDataProxy(index);
+          const triggerNode = workflowData.$('Botamin Kafka Trigger');
+          if (triggerNode && triggerNode.item && triggerNode.item.json) {
+            correlationIdFromTrigger = triggerNode.item.json.correlationId;
+            // Также обновляем triggerData для других полей
+            if (!triggerData.workflowId) {
+              triggerData = { ...triggerData, ...triggerNode.item.json };
+            }
+          }
+        } catch (e) {
+          // Игнорируем ошибки
+        }
+      }
+
       // Если workflowId нет в триггере, берем из переменной $workflow.id
       let workflowId = triggerData.workflowId;
       if (!workflowId) {
@@ -229,7 +261,9 @@ export class BotaminKafkaOutput implements INodeType {
           // Игнорируем ошибки
         }
       }
-      const correlationId = triggerData.correlationId;
+
+      // Используем correlationId из параметра, или из trigger данных
+      const correlationId = correlationIdParam || correlationIdFromTrigger;
       const domain = triggerData.domain || 'chat';
       const domainEntityId = triggerData.domainEntityId;
       const companyId = triggerData.companyId;
@@ -237,6 +271,10 @@ export class BotaminKafkaOutput implements INodeType {
       const triggerMeta = triggerData.meta && typeof triggerData.meta === 'object' 
         ? triggerData.meta as Record<string, any>
         : {};
+
+      if (!correlationId) {
+        throw new Error('Correlation ID is required. Make sure trigger data contains correlationId.');
+      }
 
       // Формируем payload для отправки в Kafka
       const result: Record<string, any> = {};
@@ -256,9 +294,9 @@ export class BotaminKafkaOutput implements INodeType {
       }
 
       const payload: Record<string, any> = {
-        executionId: String(executionId),
+        executionId: executionIdParam || correlationId || '', // Реальный executionId из n8n
         workflowId: workflowId ? String(workflowId) : undefined,
-        correlationId,
+        correlationId, // CorrelationId для поиска в core
         status,
         domain,
         domainEntityId,
