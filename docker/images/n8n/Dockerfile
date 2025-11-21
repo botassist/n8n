@@ -38,7 +38,26 @@ RUN set -e; \
     cd / && rm -rf /launcher-temp
 
 # ==============================================================================
-# STAGE 4: Final Runtime Image
+# STAGE 4: Custom Nodes Builder
+# ==============================================================================
+FROM node:${NODE_VERSION}-alpine AS custom-nodes-builder
+
+WORKDIR /build
+
+# Copy custom nodes source
+COPY ./custom-nodes ./custom-nodes
+
+# Build each custom node package
+RUN for dir in ./custom-nodes/*/; do \
+        echo "Building custom node: $(basename $dir)"; \
+        cd "$dir" && \
+        npm install && \
+        npm run build && \
+        cd /build; \
+    done
+
+# ==============================================================================
+# STAGE 5: Final Runtime Image
 # ==============================================================================
 FROM system-deps AS runtime
 
@@ -56,10 +75,14 @@ COPY --from=launcher-downloader /launcher-bin/* /usr/local/bin/
 COPY docker/images/n8n/docker-entrypoint.sh /
 COPY docker/images/n8n/n8n-task-runners.json /etc/n8n-task-runners.json
 
+# Copy custom nodes from builder stage (already built)
+# Structure: /home/node/.n8n/custom/botamin/{dist,package.json}
+COPY --from=custom-nodes-builder --chown=node:node /build/custom-nodes /home/node/.n8n/custom
+
 RUN cd /usr/local/lib/node_modules/n8n && \
 		npm rebuild sqlite3 && \
 		ln -s /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n && \
-    mkdir -p /home/node/.n8n && \
+    mkdir -p /home/node/.n8n/custom && \
     chown -R node:node /home/node
 
 RUN cd /usr/local/lib/node_modules/n8n/node_modules/pdfjs-dist && npm install @napi-rs/canvas

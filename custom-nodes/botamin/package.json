@@ -1,0 +1,33 @@
+{
+  "name": "n8n-nodes-botamin",
+  "version": "0.2.0",
+  "description": "Botamin custom nodes for Kafka transport (trigger + output).",
+  "license": "UNLICENSED",
+  "keywords": [
+    "n8n-community-node-package",
+    "kafka",
+    "botamin"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && cp -R nodes dist && cp dist/nodes/BotassistKafkaTrigger/kafka.svg dist/BotassistKafkaTrigger/ && cp dist/nodes/BotassistKafkaOutput/kafka.svg dist/BotassistKafkaOutput/",
+    "dev": "npm run build -- --watch",
+    "lint": "eslint . --ext .ts"
+  },
+  "n8n": {
+    "nodes": [
+      "dist/BotassistKafkaTrigger/BotassistKafkaTrigger.node.js",
+      "dist/BotassistKafkaOutput/BotassistKafkaOutput.node.js"
+    ],
+    "credentials": []
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.68",
+    "eslint": "^9.18.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
+  },
+  "dependencies": {
+    "kafkajs": "^2.2.4",
+    "n8n-workflow": "^1.118.1"
+  }
+}
