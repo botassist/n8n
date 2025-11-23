@@ -5,7 +5,7 @@ resources:
 - ingress.yaml
 - ../base
 images:
-  - name: ghcr.io/botassist/n8n
+  - name: ghcr.io/botassist/n8n-private
     newTag: $IMAGE_TAG
 configMapGenerator:
 - name: botassist-n8n-config
